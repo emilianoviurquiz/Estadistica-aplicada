@@ -1,0 +1,756 @@
+---
+title: "Análisis Exploratorio de Datos (EDA)"
+subtitle: "Datos del CPV 2020 - Chiapas"
+format: 
+  html:
+    grid: 
+      body-width: 950px
+lang: es
+---
+
+```{r}
+#| code-fold: true
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(sf)          # Para datos espaciales
+library(viridis)     # Para paletas de colores
+library(janitor)     # Para limpiar nombres de columnas
+library(scales)      # Para mejorar ejes en gráficos
+library(knitr)       # Para tablas con kable()
+
+```
+
+```{r}
+#| code-fold: true
+
+# Temas de ggplot reutilizables (para no repetir el mismo bloque en cada gráfica)
+tema_base <- theme_bw() +
+  theme(
+    legend.title = element_text(size = 13, face = "bold"),
+    legend.text  = element_text(size = 13),
+    plot.title    = element_text(size = 15, face = "bold"),
+    plot.subtitle = element_text(size = 13),
+    axis.text.x  = element_text(size = 12),
+    axis.text.y  = element_text(size = 12),
+    axis.title.x = element_text(face = "bold", size = 13),
+    axis.title.y = element_text(face = "bold", size = 13)
+  )
+
+tema_fino <- tema_base +
+  theme(
+    panel.grid.major.y = element_line(color = "#ECF0F1", linewidth = 0.5, linetype = "dashed"),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.background   = element_rect(fill = "#FAFAFA", color = NA),
+    plot.background    = element_rect(fill = "white", color = NA)
+  )
+
+tema_mapa <- theme_void() +
+  theme(
+    plot.title    = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    plot.caption  = element_text(size = 10),
+    legend.position = "right"
+  )
+```
+
+# Objetivo
+
+El objetivo de este documento es realizar un análisis exploratorio de datos (EDA) utilizando técnicas de estadística descriptiva y visualización gráfica. Nos enfocaremos en variables cuantitativas, una a la vez, aplicando diversas representaciones gráficas para comprender mejor la distribución y características de los datos.
+
+Uno de los primeros temas que exploraremos en la estadística inferencial será la estimación de parámetros, por lo que es fundamental entender cómo se comportan las variables en una muestra.
+
+# Datos espaciales de Chiapas
+
+Se utiliza el Marco Geoestadístico de INEGI (capa de municipios `07mun.shp`, clave de entidad **07**). Los archivos de la capa (`.shp`, `.shx`, `.dbf`, `.prj`) deben estar en la carpeta `data/`.
+
+```{r municipios}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+municipios_chis <- st_read("data/07mun.shp", quiet = TRUE)
+
+# Crear mapa de municipios de Chiapas
+mapa_municipios <- ggplot(municipios_chis) +
+  geom_sf(fill = "lightgreen", color = "white", linewidth = 0.3) +
+  labs(
+    title = "Municipios de Chiapas",
+    subtitle = paste("Total de municipios:", nrow(municipios_chis)),
+    caption = "Fuente: INEGI - Marco Geoestadístico"
+  ) +
+  tema_mapa
+
+print(mapa_municipios)
+```
+
+# Fuente de datos: INEGI
+
+Se utilizan los datos del **Instituto Nacional de Estadística y Geografía (INEGI)** de México. Específicamente, los Censos y Conteos de Población y Vivienda, disponibles en:
+
+**Enlace de descarga**: https://inegi.org.mx/app/descarga/
+
+Buscar: Estado (Chiapas). **Descargar el CSV, no el Excel**. Seleccionar: Programas \> Censos y Conteos de Población y Vivienda \> 2020 \> Indicadores 1900-2020 y descargar el archivo CSV.
+
+Del `.zip` descargado (`cpv_07_csv.zip`) se usa el archivo `conjunto_de_datos/cpv_valor_07.csv`, que se guarda en la carpeta `data/`.
+
+# Lectura de datos
+
+Carguemos los datos de población y vivienda para el año 2020, filtrando por algunos indicadores relevantes:
+
+- Edad mediana
+- Población total
+- Porcentaje de la población derechohabiente en el IMSS
+- Porcentaje de viviendas con electricidad
+- Porcentaje de viviendas particulares habitadas que disponen de Internet
+- Porcentaje de población de 12 años y más económicamente activa
+- Porcentaje de la población de 15 años y más con instrucción media superior
+
+::: {.callout-important}
+El renglón del total estatal puede venir con distintos nombres o claves según la descarga (`ESTATAL`, `Estatal`, clave 0...). Para no depender de eso, quitamos tanto `cve_municipio == 0` como cualquier renglón cuyo nombre sea "estatal" (sin importar mayúsculas), y también la clave 998 ("Otros municipios"), que no es un municipio real. Si el total estatal se queda en los datos, distorsiona todas las estadísticas.
+:::
+
+```{r}
+#| code-fold: true
+#| warning: false
+#| message: false
+
+datos_total <- read_csv("data/cpv_valor_07.csv", na = c("ND"))
+
+datos_total <- datos_total |> filter(año == 2020)
+
+datos_seleccion <- datos_total |> 
+  filter(indicador %in% c("Edad mediana", 
+                          "Población total", 
+                          "Porcentaje de la población derechohabiente en el IMSS", 
+                          "Porcentaje de viviendas con electricidad",
+                          "Porcentaje de viviendas particulares habitadas que disponen de Internet",
+                          "Porcentaje de población de 12 años y más económicamente activa",
+                          "Porcentaje de la población de 15 años y más con instrucción media superior"),
+         cve_municipio != 0,                                  # 0 = total estatal
+         cve_municipio < 900,                                 # 998 = "Otros municipios"
+         str_to_lower(desc_municipio) != "estatal") |>
+  select(cve_municipio, desc_municipio, indicador, valor)
+```
+
+Cambiamos el formato de los datos para que cada indicador sea una columna separada, facilitando el análisis posterior. Además, limpiamos los nombres de las columnas para que sean más manejables.
+
+```{r}
+#| code-fold: true
+#| warning: false
+#| message: false
+
+datos <- datos_seleccion |>
+  pivot_wider(names_from = indicador, values_from = valor) |> 
+  clean_names()
+```
+
+Los nombres de algunas variables (columnas) aún son muy extensos, por lo que es conveniente renombrarlas.
+
+```{r}
+#| code-fold: true
+
+datos <- datos |> 
+  rename(
+    electricidad   = porcentaje_de_viviendas_con_electricidad,
+    media_superior = porcentaje_de_la_poblacion_de_15_anos_y_mas_con_instruccion_media_superior,
+    imss           = porcentaje_de_la_poblacion_derechohabiente_en_el_imss,
+    pea            = porcentaje_de_poblacion_de_12_anos_y_mas_economicamente_activa,
+    internet       = porcentaje_de_viviendas_particulares_habitadas_que_disponen_de_internet
+  )
+
+names(datos)
+nrow(datos)   # deben ser 124 municipios
+```
+
+# Estadísticas descriptivas
+
+Ahora que tenemos nuestros datos preparados, realizamos un resumen numérico de las variables cuantitativas con `summary()`, que da el mínimo, los cuartiles, la mediana, la media y el máximo.
+
+```{r}
+#| code-fold: true
+
+summary(datos)
+```
+
+## Medidas de tendencia central y de dispersión
+
+`summary()` no incluye las medidas de dispersión vistas en clase, así que las calculamos para **cada variable cuantitativa**:
+
+- **Rango** = máximo − mínimo
+- **Rango intercuartílico (RIC)** = Q3 − Q1
+- **Desviación media** = $\frac{1}{n}\sum |x_i - \bar{x}|$
+- **Varianza muestral** = $s^2 = \frac{1}{n-1}\sum (x_i - \bar{x})^2$
+- **Desviación estándar** = $s$
+- **Coeficiente de variación** = $s/\bar{x}\times 100$ (permite comparar variables con distintas unidades)
+- **Asimetría** (sesgo) = $\frac{\frac{1}{n}\sum (x_i-\bar{x})^3}{\left(\frac{1}{n}\sum (x_i-\bar{x})^2\right)^{3/2}}$
+
+```{r}
+#| code-fold: true
+
+asimetria <- function(x) mean((x - mean(x))^3) / (mean((x - mean(x))^2))^(3/2)
+
+tabla_desc <- datos |> 
+  select(edad_mediana, poblacion_total, imss, electricidad, internet, media_superior, pea) |> 
+  pivot_longer(everything(), names_to = "variable", values_to = "x") |> 
+  group_by(variable) |> 
+  summarise(
+    n             = sum(!is.na(x)),
+    media         = mean(x, na.rm = TRUE),
+    mediana       = median(x, na.rm = TRUE),
+    minimo        = min(x, na.rm = TRUE),
+    maximo        = max(x, na.rm = TRUE),
+    rango         = maximo - minimo,
+    q1            = quantile(x, 0.25, na.rm = TRUE),
+    q3            = quantile(x, 0.75, na.rm = TRUE),
+    ric           = q3 - q1,
+    desv_media    = mean(abs(x - mean(x, na.rm = TRUE)), na.rm = TRUE),
+    varianza      = var(x, na.rm = TRUE),
+    desv_est      = sd(x, na.rm = TRUE),
+    cv_pct        = desv_est / media * 100,
+    asimetria     = asimetria(x[!is.na(x)]),
+    .groups = "drop"
+  )
+
+kable(tabla_desc, digits = 2, format.args = list(big.mark = ","),
+      caption = "Medidas descriptivas por variable (124 municipios de Chiapas, CPV 2020)")
+```
+
+**Lectura rápida de la tabla:**
+
+- **Población total**: la media (≈ 44,708) es casi el doble de la mediana (≈ 26,164) y el coeficiente de variación pasa de 150 %. La distribución está fuertemente sesgada a la derecha: pocos municipios (Tuxtla Gutiérrez, Tapachula, Ocosingo...) concentran mucha población. Para esta variable la mediana y el RIC describen mejor al municipio típico que la media y la desviación estándar.
+- **Derechohabientes IMSS** e **Internet**: coeficientes de variación muy altos (≈ 90 % y 81 %) con medias bajas (≈ 11.8 % y ≈ 12 %); la gran mayoría de los municipios tiene baja cobertura y unos pocos urbanos se alejan mucho.
+- **Edad mediana, PEA y media superior**: variación moderada (CV ≈ 16 %, 17 % y 29 %). La edad mediana es baja (media ≈ 23.6 años).
+- **Electricidad**: casi todos los municipios están cerca de 98 % (CV ≈ 2.5 %); la asimetría negativa fuerte se debe a unos pocos municipios con cobertura menor (mínimo ≈ 81.8 %).
+
+## Unión de datos espaciales y estadísticos
+
+Se unen los datos geográficos de los municipios con los datos de población y vivienda para poder crear mapas. Para preservar la integridad de los datos se usa `left_join()` de `dplyr`; el primer conjunto de datos debe ser el que contiene la columna `geometry`.
+
+La unión se hace por la **clave del municipio** (`CVE_MUN` en el shapefile, `cve_municipio` en el CSV) y no por el nombre, porque los nombres pueden diferir en acentos o abreviaturas entre las dos fuentes.
+
+```{r}
+#| code-fold: true
+
+municipios_chis <- municipios_chis |> 
+  mutate(cve_municipio = as.integer(CVE_MUN))
+
+datos <- left_join(municipios_chis, datos, by = "cve_municipio")
+
+# Verificación: ningún municipio debe quedar sin datos
+sum(is.na(datos$edad_mediana))
+```
+
+
+# Edad (mediana)
+
+```{r}
+#| code-fold: true
+#| fig-width: 8
+#| fig-align: center
+
+ggplot(datos) +
+  geom_sf(aes(fill = edad_mediana), color = "white", linewidth = 0.1) +
+  scale_fill_viridis_c(
+    name = "Edad (años)"
+  ) +
+  labs(
+    title = "Edad (mediana) por municipio de Chiapas",
+    caption = "Fuente: INEGI - CPV 2020"
+  ) +
+  tema_mapa
+```
+
+## Histograma
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(datos) +
+  geom_histogram(aes(edad_mediana), color = "black", fill = "olivedrab", boundary = min(datos$edad_mediana), binwidth = 1) +
+  labs(
+    title = "Distribución: Edad (mediana)",
+    x = "Edad (años)", y = "Frecuencia"
+  ) +
+  tema_base
+```
+
+## Gráfica de densidad
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(datos) +
+  geom_density(aes(edad_mediana), color = "black", fill = "firebrick", alpha = 0.6) +
+  labs(
+    title = "Densidad: Edad (mediana)",
+    x = "Edad (años)", y = "Densidad"
+  ) +
+  tema_base
+```
+
+## Boxplot
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(x = "", y = edad_mediana)) +
+  geom_boxplot(
+    fill = "#4A90E2", color = "#2C5F7A", alpha = 0.8,
+    outlier.color = "#E74C3C", outlier.size = 2.5, outlier.alpha = 0.7,
+    width = 0.5, notch = TRUE, notchwidth = 0.7
+  ) +
+  geom_jitter(alpha = 0.3, color = "#34495E", size = 1.5, width = 0.1) +
+  scale_y_continuous(breaks = pretty_breaks(n = 8), labels = function(x) paste(x, "años")) +
+  labs(title = "Boxplot: Edad (mediana)", 
+       subtitle = "Estado de Chiapas",
+       y = "Edad (años)", x = "") +
+  tema_fino
+```
+
+## Gráfico de violín
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(x = "", y = edad_mediana)) +
+  geom_violin(fill = "#4A90E2", color = "#2C5F7A", alpha = 0.8,
+              trim = FALSE, scale = "width", width = 0.8, linewidth = 0.8) +
+  geom_boxplot(width = 0.15, fill = "white", color = "#2C5F7A", alpha = 0.9,
+               outlier.color = "#E74C3C", outlier.size = 1.5, outlier.alpha = 0.8, notch = FALSE) +
+  stat_summary(fun = median, geom = "point", shape = 21, size = 3, fill = "white",
+               color = "#2C5F7A", stroke = 1.5) +
+  geom_jitter(alpha = 0.2, color = "#34495E", size = 0.8, width = 0.05) +
+  scale_y_continuous(breaks = pretty_breaks(n = 8), labels = function(x) paste(x, "años")) +
+  labs(title = "Violín: Edad (mediana)", 
+       subtitle = "Estado de Chiapas",
+       y = "Edad (años)", x = "") +
+  tema_fino
+```
+
+## Q-Q Plot (comparación de cuantiles)
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(sample = edad_mediana)) +
+  stat_qq(color = "#4A90E2", size = 2, alpha = 0.7) +
+  stat_qq_line(color = "#E74C3C", linewidth = 1, linetype = "dashed") +
+  scale_x_continuous(name = "Cuantiles teóricos (Distribución Normal)", breaks = pretty_breaks(n = 6)) +
+  scale_y_continuous(name = "Cuantiles muestrales (Edad mediana)", breaks = pretty_breaks(n = 6), labels = function(x) paste(x, "años")) +
+  labs(title = "Gráfico Q-Q para normalidad",
+       subtitle = "Edad (mediana) - Chiapas") +
+  tema_fino
+```
+
+## Dot Plot (Gráfico de puntos)
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-height: 16
+#| fig-align: center
+
+ggplot(data = datos, aes(x = edad_mediana, y = reorder(desc_municipio, edad_mediana))) +
+  geom_segment(aes(x = 0, xend = edad_mediana, yend = reorder(desc_municipio, edad_mediana)),
+               color = "#BDC3C7", linewidth = 0.5, alpha = 0.7) +
+  geom_point(color = "#4A90E2", size = 3, alpha = 0.8) +
+  scale_x_continuous(name = "Edad (años)", breaks = pretty_breaks(n = 6),
+                     expand = expansion(mult = c(0, 0.1))) +
+  scale_y_discrete(name = "Municipios", expand = expansion(mult = c(0.01, 0.01))) +
+  labs(title = "Dot Plot - Edad (mediana) por municipio",
+       subtitle = "Estado de Chiapas") +
+  tema_fino +
+  theme(axis.text.y = element_text(size = 9))
+```
+
+## Interpretación
+
+La edad mediana municipal va de 15 a 33 años, con media ≈ 23.6 y mediana 24 (Q1–Q3: 21 a 27). La distribución es prácticamente simétrica y **no presenta valores atípicos** según el criterio de 1.5·RIC. Es una población joven en comparación con el resto del país.
+
+# Derechohabientes IMSS (%)
+
+```{r}
+#| code-fold: true
+#| fig-width: 8
+#| fig-align: center
+
+ggplot(datos) +
+  geom_sf(aes(fill = imss), color = "white", linewidth = 0.1) +
+  scale_fill_viridis_c(
+    name = "IMSS (%)"
+  ) +
+  labs(
+    title = "Derechohabientes IMSS (%) por municipio de Chiapas",
+    caption = "Fuente: INEGI - CPV 2020"
+  ) +
+  tema_mapa
+```
+
+## Histograma
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(datos) +
+  geom_histogram(aes(imss), color = "black", fill = "olivedrab", boundary = min(datos$imss), binwidth = 5) +
+  labs(
+    title = "Distribución: Derechohabientes IMSS (%)",
+    x = "IMSS (%)", y = "Frecuencia"
+  ) +
+  tema_base
+```
+
+## Gráfica de densidad
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(datos) +
+  geom_density(aes(imss), color = "black", fill = "#122ABB", alpha = 0.6) +
+  labs(
+    title = "Densidad: Derechohabientes IMSS (%)",
+    x = "IMSS (%)", y = "Densidad"
+  ) +
+  tema_base
+```
+
+## Boxplot
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(x = "", y = imss)) +
+  geom_boxplot(
+    fill = "#4A90E2", color = "#2C5F7A", alpha = 0.8,
+    outlier.color = "#E74C3C", outlier.size = 2.5, outlier.alpha = 0.7,
+    width = 0.5, notch = TRUE, notchwidth = 0.7
+  ) +
+  geom_jitter(alpha = 0.3, color = "#34495E", size = 1.5, width = 0.1) +
+  scale_y_continuous(breaks = pretty_breaks(n = 8), labels = function(x) paste(x, "%")) +
+  labs(title = "Boxplot: Derechohabientes IMSS (%)", 
+       subtitle = "Estado de Chiapas",
+       y = "IMSS (%)", x = "") +
+  tema_fino
+```
+
+## Gráfico de violín
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(x = "", y = imss)) +
+  geom_violin(fill = "#4A90E2", color = "#2C5F7A", alpha = 0.8,
+              trim = FALSE, scale = "width", width = 0.8, linewidth = 0.8) +
+  geom_boxplot(width = 0.15, fill = "white", color = "#2C5F7A", alpha = 0.9,
+               outlier.color = "#E74C3C", outlier.size = 1.5, outlier.alpha = 0.8, notch = FALSE) +
+  stat_summary(fun = median, geom = "point", shape = 21, size = 3, fill = "white",
+               color = "#2C5F7A", stroke = 1.5) +
+  geom_jitter(alpha = 0.2, color = "#34495E", size = 0.8, width = 0.05) +
+  scale_y_continuous(breaks = pretty_breaks(n = 8), labels = function(x) paste(x, "%")) +
+  labs(title = "Violín: Derechohabientes IMSS (%)", 
+       subtitle = "Estado de Chiapas",
+       y = "IMSS (%)", x = "") +
+  tema_fino
+```
+
+## Q-Q Plot (comparación de cuantiles)
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(sample = imss)) +
+  stat_qq(color = "#4A90E2", size = 2, alpha = 0.7) +
+  stat_qq_line(color = "#E74C3C", linewidth = 1, linetype = "dashed") +
+  scale_x_continuous(name = "Cuantiles teóricos (Distribución Normal)", breaks = pretty_breaks(n = 6)) +
+  scale_y_continuous(name = "Cuantiles muestrales (Derechohabientes IMSS %)", breaks = pretty_breaks(n = 6), labels = function(x) paste(x, "%")) +
+  labs(title = "Gráfico Q-Q para normalidad",
+       subtitle = "Derechohabientes IMSS (%) - Chiapas") +
+  tema_fino
+```
+
+## Interpretación
+
+El porcentaje de derechohabientes del IMSS es bajo en la mayoría de los municipios: mediana ≈ 9 %, media ≈ 11.8 %, con valores entre ≈ 0.1 % y ≈ 52 %. La distribución tiene sesgo a la derecha. Según el criterio de 1.5·RIC hay 4 valores atípicos altos: Metapa, Huixtla, Tapachula y Tuxtla Gutiérrez (≈ 42 % a ≈ 52 %).
+
+# Población total
+
+```{r}
+#| code-fold: true
+#| fig-width: 8
+#| fig-align: center
+
+ggplot(datos) +
+  geom_sf(aes(fill = poblacion_total), color = "white", linewidth = 0.1) +
+  scale_fill_viridis_c(
+    name = "Personas",
+    trans = "log10",
+    labels = scales::comma_format()
+  ) +
+  labs(
+    title = "Población total por municipio de Chiapas",
+    caption = "Fuente: INEGI - CPV 2020"
+  ) +
+  tema_mapa
+```
+
+## Histograma
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(datos) +
+  geom_histogram(aes(poblacion_total), color = "black", fill = "olivedrab", boundary = min(datos$poblacion_total), bins = 15) +
+  scale_x_log10(breaks = c(1000, 10000, 100000, 1e6), labels = scales::comma_format()) +
+  labs(
+    title = "Distribución: Población total",
+    x = "Personas", y = "Frecuencia"
+  ) +
+  tema_base
+```
+
+## Gráfica de densidad
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(datos) +
+  geom_density(aes(poblacion_total), color = "black", fill = "firebrick", alpha = 0.6) +
+  labs(
+    title = "Densidad: Población total",
+    x = "Personas", y = "Densidad"
+  ) +
+  scale_x_log10(breaks = c(1000, 10000, 100000, 1e6), labels = scales::comma_format()) +
+  tema_base
+```
+
+## Boxplot
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(x = "", y = poblacion_total)) +
+  geom_boxplot(
+    fill = "#4A90E2", color = "#2C5F7A", alpha = 0.8,
+    outlier.color = "#E74C3C", outlier.size = 2.5, outlier.alpha = 0.7,
+    width = 0.5, notch = TRUE, notchwidth = 0.7
+  ) +
+  geom_jitter(alpha = 0.3, color = "#34495E", size = 1.5, width = 0.1) +
+  scale_y_log10(breaks = c(1000, 10000, 100000, 1e6), labels = scales::comma_format()) +
+  labs(title = "Boxplot: Población total", 
+       subtitle = "Estado de Chiapas",
+       y = "Personas", x = "") +
+  tema_fino
+```
+
+## Gráfico de violín
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(x = "", y = poblacion_total)) +
+  geom_violin(fill = "#4A90E2", color = "#2C5F7A", alpha = 0.8,
+              trim = FALSE, scale = "width", width = 0.8, linewidth = 0.8) +
+  geom_boxplot(width = 0.15, fill = "white", color = "#2C5F7A", alpha = 0.9,
+               outlier.color = "#E74C3C", outlier.size = 1.5, outlier.alpha = 0.8, notch = FALSE) +
+  stat_summary(fun = median, geom = "point", shape = 21, size = 3, fill = "white",
+               color = "#2C5F7A", stroke = 1.5) +
+  geom_jitter(alpha = 0.2, color = "#34495E", size = 0.8, width = 0.05) +
+  scale_y_log10(breaks = c(1000, 10000, 100000, 1e6), labels = scales::comma_format()) +
+  labs(title = "Violín: Población total", 
+       subtitle = "Estado de Chiapas",
+       y = "Personas", x = "") +
+  tema_fino
+```
+
+## Q-Q Plot (comparación de cuantiles)
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(sample = poblacion_total)) +
+  stat_qq(color = "#4A90E2", size = 2, alpha = 0.7) +
+  stat_qq_line(color = "#E74C3C", linewidth = 1, linetype = "dashed") +
+  scale_x_continuous(name = "Cuantiles teóricos (Distribución Normal)", breaks = pretty_breaks(n = 6)) +
+  scale_y_log10(name = "Cuantiles muestrales (Población, escala log)", labels = scales::comma_format()) +
+  labs(title = "Gráfico Q-Q para normalidad",
+       subtitle = "Población total - Chiapas") +
+  tema_fino
+```
+
+## Interpretación
+
+La población está muy concentrada: va de 2,308 a 604,147 personas, con mediana ≈ 26,164 y media ≈ 44,708. Según 1.5·RIC hay 11 municipios atípicos, encabezados por Tuxtla Gutiérrez (≈ 604 mil), Tapachula (≈ 354 mil), Ocosingo (≈ 235 mil) y San Cristóbal de las Casas (≈ 216 mil). Por eso se usa **escala logarítmica** en los gráficos de esta variable.
+
+# Población de 12 años y más económicamente activa (%)
+
+```{r}
+#| code-fold: true
+#| fig-width: 8
+#| fig-align: center
+
+ggplot(datos) +
+  geom_sf(aes(fill = pea), color = "white", linewidth = 0.1) +
+  scale_fill_viridis_c(
+    name = "PEA (%)"
+  ) +
+  labs(
+    title = "Población de 12 años y más económicamente activa (%) por municipio de Chiapas",
+    caption = "Fuente: INEGI - CPV 2020"
+  ) +
+  tema_mapa
+```
+
+## Histograma
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(datos) +
+  geom_histogram(aes(pea), color = "black", fill = "olivedrab", boundary = min(datos$pea), binwidth = 2) +
+  labs(
+    title = "Distribución: Población de 12 años y más económicamente activa (%)",
+    x = "PEA (%)", y = "Frecuencia"
+  ) +
+  tema_base
+```
+
+## Gráfica de densidad
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(datos) +
+  geom_density(aes(pea), color = "black", fill = "#122ABB", alpha = 0.6) +
+  labs(
+    title = "Densidad: Población de 12 años y más económicamente activa (%)",
+    x = "PEA (%)", y = "Densidad"
+  ) +
+  tema_base
+```
+
+## Boxplot
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(x = "", y = pea)) +
+  geom_boxplot(
+    fill = "#4A90E2", color = "#2C5F7A", alpha = 0.8,
+    outlier.color = "#E74C3C", outlier.size = 2.5, outlier.alpha = 0.7,
+    width = 0.5, notch = TRUE, notchwidth = 0.7
+  ) +
+  geom_jitter(alpha = 0.3, color = "#34495E", size = 1.5, width = 0.1) +
+  scale_y_continuous(breaks = pretty_breaks(n = 8), labels = function(x) paste(x, "%")) +
+  labs(title = "Boxplot: Población de 12 años y más económicamente activa (%)", 
+       subtitle = "Estado de Chiapas",
+       y = "PEA (%)", x = "") +
+  tema_fino
+```
+
+## Gráfico de violín
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(x = "", y = pea)) +
+  geom_violin(fill = "#4A90E2", color = "#2C5F7A", alpha = 0.8,
+              trim = FALSE, scale = "width", width = 0.8, linewidth = 0.8) +
+  geom_boxplot(width = 0.15, fill = "white", color = "#2C5F7A", alpha = 0.9,
+               outlier.color = "#E74C3C", outlier.size = 1.5, outlier.alpha = 0.8, notch = FALSE) +
+  stat_summary(fun = median, geom = "point", shape = 21, size = 3, fill = "white",
+               color = "#2C5F7A", stroke = 1.5) +
+  geom_jitter(alpha = 0.2, color = "#34495E", size = 0.8, width = 0.05) +
+  scale_y_continuous(breaks = pretty_breaks(n = 8), labels = function(x) paste(x, "%")) +
+  labs(title = "Violín: Población de 12 años y más económicamente activa (%)", 
+       subtitle = "Estado de Chiapas",
+       y = "PEA (%)", x = "") +
+  tema_fino
+```
+
+## Q-Q Plot (comparación de cuantiles)
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(data = datos, aes(sample = pea)) +
+  stat_qq(color = "#4A90E2", size = 2, alpha = 0.7) +
+  stat_qq_line(color = "#E74C3C", linewidth = 1, linetype = "dashed") +
+  scale_x_continuous(name = "Cuantiles teóricos (Distribución Normal)", breaks = pretty_breaks(n = 6)) +
+  scale_y_continuous(name = "Cuantiles muestrales (PEA %)", breaks = pretty_breaks(n = 6), labels = function(x) paste(x, "%")) +
+  labs(title = "Gráfico Q-Q para normalidad",
+       subtitle = "Población de 12 años y más económicamente activa (%) - Chiapas") +
+  tema_fino
+```
+
+## Interpretación
+
+La PEA tiene media ≈ 56.2 % y mediana ≈ 58.7 %, con ligero sesgo a la izquierda. El 50 % central de los municipios (Q1–Q3) está entre ≈ 50.4 % y ≈ 63 %. Mitontic (≈ 25.1 %) es un valor atípico bajo; el máximo es ≈ 77.6 %.
+
+# Relación entre PEA y Derechohabientes IMSS (%)
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+ggplot(datos) +
+  geom_point(aes(x = pea, y = imss), color = "#4A90E2", size = 3, alpha = 0.8) +
+  geom_smooth(aes(x = pea, y = imss), method = "lm", color = "#E74C3C", se = TRUE) +
+  labs(title = "Relación PEA (%) y Derechohabientes IMSS (%)",
+       subtitle = "Estado de Chiapas",
+       x = "PEA (%)", y = "Derechohabientes IMSS (%)") +
+  scale_x_continuous(breaks = pretty_breaks(n = 8), labels = function(x) paste(x, "%")) +
+  scale_y_continuous(breaks = pretty_breaks(n = 6), labels = function(x) paste(x, "%")) +
+  tema_fino
+```
+
+```{r}
+#| code-fold: true
+
+cor(datos$pea, datos$imss)   # coeficiente de correlación de Pearson
+```
+
+Existe una relación lineal positiva **débil** entre ambas variables (r ≈ 0.26): los municipios con más PEA tienden a tener algo más de derechohabientes del IMSS, pero la PEA explica muy poco de la variación del IMSS. Los municipios urbanos (Tuxtla Gutiérrez, Tapachula) tienen mucha afiliación sin ser los de mayor PEA. Correlación no implica causalidad.
