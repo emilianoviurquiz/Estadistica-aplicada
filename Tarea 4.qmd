@@ -1,0 +1,850 @@
+---
+title: "Tarea 4"
+author: "Emiliano Viurquiz"
+format: revealjs
+---
+```{r}
+#| label: setup
+#| include: false
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+```
+## Ejercicios Propuestos
+
+::: {#exr-binomial-medicamento}
+Un medicamento tiene efectividad del 85%. Se administra a 20 pacientes.
+
+a)  Brindar la gráfica de la función de probabilidad considerando $X\sim \text{Binomial}(20, 0.85)$.
+
+b)  Proporcionar la esperanza, varianza y desviación estándar.
+
+c)  Realiza una simulación con 1000 experimentos y compara los resultados con los valores teóricos.
+:::
+
+```{r}
+# a) grafica
+#| label: ej1-grafica
+#| code-fold: true
+#| fig-align: center
+
+n_med <- 20
+p_med <- 0.85
+
+k_med <- 0:n_med
+prob_med <- dbinom(k_med, n_med, p_med)
+datos_med <- data.frame(k = k_med, probabilidad = prob_med)
+
+ggplot(datos_med, aes(x = k, y = probabilidad)) +
+  geom_col(fill = "steelblue", alpha = 0.7) +
+  scale_x_continuous(breaks = k_med) +
+  labs(title = "Distribución Binomial(20, 0.85)",
+       x = "Número de pacientes curados",
+       y = "Probabilidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+# b) Eperanza, Varianza y desviación estandar
+media_med <- n_med * p_med
+var_med <- n_med * p_med * (1 - p_med)
+sd_med <- sqrt(var_med)
+
+cat("Esperanza:", media_med, "\n")
+cat("Varianza:", var_med, "\n")
+cat("Desviación estándar:", round(sd_med, 4), "\n")
+```
+
+```{r}
+# c) Simulación de 1000 experimentos
+set.seed(123)
+sim_med <- rbinom(1000, n_med, p_med)
+
+cat("Media teórica:", media_med, "| Media observada:", round(mean(sim_med), 4), "\n")
+cat("Varianza teórica:", var_med, "| Varianza observada:", round(var(sim_med), 4), "\n")
+cat("Desv. estándar teórica:", round(sd_med, 4), "| Desv. estándar observada:", round(sd(sim_med), 4), "\n")
+```
+
+```{r}
+#| code-fold: true
+#| fig-align: center
+
+freq_obs <- table(sim_med) / 1000
+k_sim <- as.numeric(names(freq_obs))
+
+comp_med <- data.frame(
+  k = rep(k_sim, 2),
+  Probabilidad = c(as.numeric(freq_obs), dbinom(k_sim, n_med, p_med)),
+  Tipo = rep(c("Simulada", "Teórica"), each = length(k_sim))
+)
+
+ggplot(comp_med, aes(x = k, y = Probabilidad, fill = Tipo)) +
+  geom_col(position = "dodge", alpha = 0.7) +
+  scale_fill_manual(values = c("Teórica" = "blue", "Simulada" = "red")) +
+  labs(title = "Distribución teórica vs simulada",
+       x = "Número de pacientes curados",
+       y = "Probabilidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Los valores simulados son muy cercanos a los teóricos.
+
+::: {#exr-simulacion_teorema}
+Verificar el siguiente teorema mediante simulación.
+
+Sean $X$ y $Y$ dos variables aleatorias independientes con distribución $bin(n, p)$, y $bin(m, p)$, respectivamente. Entonces la variable $X+Y$ tiene distribución $bin(n+m, p)$.
+:::
+
+# Aqui tome n=10, m=15 p=04
+
+```{r}
+#| code-fold: true
+#| fig-align: center
+
+set.seed(123)
+n1 <- 10
+m1 <- 15
+p_t <- 0.4
+n_sim <- 10000
+
+X <- rbinom(n_sim, n1, p_t)
+Y <- rbinom(n_sim, m1, p_t)
+suma <- X + Y
+
+cat("Media de X+Y:", round(mean(suma), 4), "| Teórica:", (n1 + m1) * p_t, "\n")
+cat("Varianza de X+Y:", round(var(suma), 4), "| Teórica:", (n1 + m1) * p_t * (1 - p_t), "\n")
+
+freq_suma <- table(suma) / n_sim
+k_suma <- as.numeric(names(freq_suma))
+
+comp_suma <- data.frame(
+  k = rep(k_suma, 2),
+  Probabilidad = c(as.numeric(freq_suma), dbinom(k_suma, n1 + m1, p_t)),
+  Tipo = rep(c("X+Y simulada", "Bin(25, 0.4) teórica"), each = length(k_suma))
+)
+
+ggplot(comp_suma, aes(x = k, y = Probabilidad, fill = Tipo)) +
+  geom_col(position = "dodge", alpha = 0.7) +
+  scale_fill_manual(values = c("Bin(25, 0.4) teórica" = "blue", "X+Y simulada" = "red")) +
+  labs(title = "X + Y vs Binomial(25, 0.4)",
+       x = "Valor",
+       y = "Probabilidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Considero que si verifique el teorema por la distribución de X + Y coincide con la de una  bin(n+m, p).
+
+::: {#exr-aproximacion_normal}
+Considerando una distribución binomial con parámetros $n=100$ y $p=0.3$, verifica si se cumplen las condiciones para la aproximación normal. Realiza la comparación entre la distribución binomial y su aproximación normal.
+:::
+
+```{r}
+#| code-fold: true
+#| fig-align: center
+
+n_ap <- 100
+p_ap <- 0.3
+
+cat("np =", n_ap * p_ap, "≥ 5:", n_ap * p_ap >= 5, "\n")
+cat("n(1-p) =", n_ap * (1 - p_ap), "≥ 5:", n_ap * (1 - p_ap) >= 5, "\n")
+
+media_ap <- n_ap * p_ap
+sd_ap <- sqrt(n_ap * p_ap * (1 - p_ap))
+
+k_ap <- 0:n_ap
+datos_ap <- data.frame(k = k_ap, probabilidad = dbinom(k_ap, n_ap, p_ap))
+datos_ap <- datos_ap[datos_ap$probabilidad > 0.001, ]
+
+ggplot(datos_ap, aes(x = k, y = probabilidad)) +
+  geom_col(fill = "steelblue", alpha = 0.7) +
+  geom_function(fun = dnorm, args = list(mean = media_ap, sd = sd_ap),
+                color = "red", linewidth = 1) +
+  labs(title = "Binomial(100, 0.3) y su aproximación Normal(30, 21)",
+       x = "k",
+       y = "Probabilidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Aqui se cumplen las dos condiciones y la curva se ajusta
+
+::: {#exr-tcl_binomial}
+Generar $k=1000$ muestras de tamaño 30 de una distribución binomial con parámetros $n=10$ y $p=0.7$. Verificar el Teorema Central del Límite para las medias muestrales.
+:::
+
+```{r}
+
+
+set.seed(123)
+k_m <- 1000
+n_m <- 30
+n_b <- 10
+p_b <- 0.7
+
+medias <- replicate(k_m, mean(rbinom(n_m, n_b, p_b)))
+
+ggplot(data.frame(Medias = medias)) +
+  geom_histogram(aes(x = Medias, after_stat(density)), bins = 30,
+                 fill = "lightblue", color = "black", alpha = 0.7) +
+  geom_function(fun = dnorm, args = list(mean = n_b * p_b, sd = sqrt(2.1 / 30)),
+                color = "darkgreen", linetype = "dashed", linewidth = 1) +
+  labs(title = "Distribución de Medias Muestrales",
+       subtitle = "Muestras de tamaño 30 de una Binomial(10, 0.7)",
+       x = "Media muestral",
+       y = "Densidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+cat("Media teórica:", n_b * p_b, "| Media observada:", round(mean(medias), 4), "\n")
+cat("Varianza teórica:", round(2.1 / 30, 4), "| Varianza observada:", round(var(medias), 4), "\n")
+```
+
+# Parte dos
+
+## Ejercicios Propuestos
+
+::: {#exr-grafico}
+Implementa una función que tome como parámetros $(r, p, n_{sim})$ y devuelva un gráfico comparativo entre la suma de geométricas y la binomial negativa.
+:::
+
+```{r}
+#| code-fold: true
+#| fig-align: center
+
+comparar_geo_binneg <- function(r, p, n_sim) {
+  
+  # Suma de r geométricas
+  suma_geo <- replicate(n_sim, sum(rgeom(r, prob = p)))
+  
+  # Binomial negativa directa
+  binneg <- rnbinom(n_sim, size = r, prob = p)
+  
+  # Data frame para el gráfico
+  datos <- data.frame(
+    valores = c(suma_geo, binneg),
+    metodo = rep(c("Suma de geométricas", "Binomial negativa"), each = n_sim)
+  )
+  
+  ggplot(datos, aes(x = valores, fill = metodo)) +
+    geom_histogram(alpha = 0.6, bins = 30, position = "identity") +
+    facet_wrap(~metodo, ncol = 1) +
+    labs(title = "Suma de geométricas vs Binomial negativa",
+         subtitle = paste("r =", r, ", p =", p, ", n_sim =", n_sim),
+         x = "Número de fracasos",
+         y = "Frecuencia") +
+    theme_minimal() +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5),
+          plot.subtitle = element_text(hjust = 0.5)) +
+    scale_fill_manual(values = c("#3498DB", "#E74C3C"))
+}
+
+# Ejemplo de uso
+set.seed(123)
+comparar_geo_binneg(r = 4, p = 0.3, n_sim = 10000)
+```
+
+::: {#exr-tcl_binneg}
+Generar $k=1000$ muestras de tamaño 50 de una distribución binomial negativa con parámetros $r\geq 1$ y $0<p<1$. Verificar el Teorema Central del Límite para las medias muestrales. No confundir con la aproximación a la distribución normal.
+:::
+
+```{r}
+set.seed(123)
+k_m <- 1000
+n_m <- 50
+r_tcl <- 5
+p_tcl <- 0.4
+
+# Parámetros teóricos
+mu_tcl <- r_tcl * (1 - p_tcl) / p_tcl
+var_tcl <- r_tcl * (1 - p_tcl) / (p_tcl^2)
+
+# Medias muestrales
+medias <- replicate(k_m, mean(rnbinom(n_m, size = r_tcl, prob = p_tcl)))
+
+ggplot(data.frame(Medias = medias)) +
+  geom_histogram(aes(x = Medias, after_stat(density)), bins = 30,
+                 fill = "lightblue", color = "black", alpha = 0.7) +
+  geom_function(fun = dnorm, args = list(mean = mu_tcl, sd = sqrt(var_tcl / n_m)),
+                color = "darkgreen", linetype = "dashed", linewidth = 1) +
+  labs(title = "Distribución de Medias Muestrales",
+       subtitle = paste("1000 muestras de tamaño 50 de una BinNeg(", r_tcl, ",", p_tcl, ")"),
+       x = "Media muestral",
+       y = "Densidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+cat("Media teórica:", mu_tcl, "| Media observada:", round(mean(medias), 4), "\n")
+cat("Varianza teórica de la media:", round(var_tcl / n_m, 4), "| Varianza observada:", round(var(medias), 4), "\n")
+```
+
+# Parte 3
+
+## Ejercicios Propuestos
+
+::: {#exr-geom_1}
+Una máquina tiene probabilidad 0.02 de producir una pieza defectuosa.
+
+a)  Brindar las gráficas de la función de probabilidad y la función de distribución (probabilidad acumulada)
+
+b)  Calcula los valores de la esperanza, varianza y desviación estándar.
+
+c)  Genera una simulación de 10,000 ensayos y compara los resultados con los valores teóricos.
+
+d)  Verifica la propiedad de falta de memoria para este problema.
+:::
+
+```{r}
+# a) grafica
+p_maq <- 0.02
+
+k_maq <- 0:200
+datos_maq <- data.frame(
+  k = k_maq,
+  Probabilidad = dgeom(k_maq, p_maq),
+  Acumulada = pgeom(k_maq, p_maq)
+)
+
+# Función de probabilidad
+ggplot(datos_maq, aes(x = k, y = Probabilidad)) +
+  geom_col(fill = "steelblue", alpha = 0.7) +
+  labs(title = "Función de probabilidad: Geométrica(0.02)",
+       x = "Número de piezas buenas antes de la primera defectuosa",
+       y = "P(X = x)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Función de distribución
+ggplot(datos_maq, aes(x = k, y = Acumulada)) +
+  geom_step(color = "darkgreen", linewidth = 1) +
+  labs(title = "Función de distribución: Geométrica(0.02)",
+       x = "Número de piezas buenas antes de la primera defectuosa",
+       y = "P(X ≤ x)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+# b) ESperanza y varianza
+media_maq <- (1 - p_maq) / p_maq
+var_maq <- (1 - p_maq) / (p_maq^2)
+sd_maq <- sqrt(var_maq)
+
+cat("Esperanza:", media_maq, "\n")
+cat("Varianza:", var_maq, "\n")
+cat("Desviación estándar:", round(sd_maq, 4), "\n")
+```
+
+```{r}
+# simulación
+set.seed(123)
+n_sim <- 10000
+sim_maq <- rgeom(n_sim, p_maq)
+
+cat("Media teórica:", media_maq, "| Media observada:", round(mean(sim_maq), 4), "\n")
+cat("Varianza teórica:", var_maq, "| Varianza observada:", round(var(sim_maq), 4), "\n")
+cat("Desv. estándar teórica:", round(sd_maq, 4), "| Desv. estándar observada:", round(sd(sim_maq), 4), "\n")
+```
+
+```{r}
+# d) propieda de la falta de memoria
+s <- 30
+t <- 20
+
+# P(X >= s + t)
+prob_s_t <- 1 - pgeom(s + t - 1, p_maq)
+
+# P(X >= s)
+prob_s <- 1 - pgeom(s - 1, p_maq)
+
+# P(X >= t)
+prob_t <- 1 - pgeom(t - 1, p_maq)
+
+# P(X >= s + t | X >= s)
+prob_condicional <- prob_s_t / prob_s
+
+cat("P(X ≥", s + t, "| X ≥", s, ") =", round(prob_condicional, 6), "\n")
+cat("P(X ≥", t, ") =", round(prob_t, 6), "\n")
+cat("¿Son iguales?", abs(prob_condicional - prob_t) < 1e-10, "\n")
+```
+
+::: {#exr-geom_2}
+Generar $k=1000$ muestras de tamaño $n=50$ de una distribución geométrica para alguna $p$, y verificar el Teorema Central del Límite para las medias muestrales.
+:::
+
+```{r}
+set.seed(123)
+k_m <- 1000
+n_m <- 50
+p_tcl <- 0.2
+
+# Parámetros teóricos
+mu_tcl <- (1 - p_tcl) / p_tcl
+var_tcl <- (1 - p_tcl) / (p_tcl^2)
+
+# Medias muestrales
+medias <- replicate(k_m, mean(rgeom(n_m, p_tcl)))
+```
+
+```{r}
+ggplot(data.frame(Medias = medias)) +
+  geom_histogram(aes(x = Medias, after_stat(density)), bins = 30,
+                 fill = "lightblue", color = "black", alpha = 0.7) +
+  geom_function(fun = dnorm, args = list(mean = mu_tcl, sd = sqrt(var_tcl / n_m)),
+                color = "darkgreen", linetype = "dashed", linewidth = 1) +
+  labs(title = "Distribución de Medias Muestrales",
+       subtitle = "1000 muestras de tamaño 50 de una Geométrica(0.2)",
+       x = "Media muestral",
+       y = "Densidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+cat("Media teórica:", mu_tcl, "| Media observada:", round(mean(medias), 4), "\n")
+cat("Varianza teórica de la media:", var_tcl / n_m, "| Varianza observada:", round(var(medias), 4), "\n")
+```
+
+# PArte 4
+
+## Distribución Hipergeométrica
+
+Esta distribución se usa cuando se toma una muestra \*sin reemplazo\* de una población finita que tiene dos tipos de elementos (los que nos interesan y los que no).
+
+
+Sea una población de N elementos, de los cuales K son de interés. Se toma una muestra de tamaño n sin reemplazo y sea X el número de elementos de interés en la muestra. 
+Características
+
+\*Parámetros\*
+
+- N: tamaño de la población
+- K: número de elementos de interés en la población
+- n: tamaño de la muestra
+
+
+Ejemplo
+
+Un lote tiene N=50 piezas y K=10 son defectuosas. Se revisan n=8 piezas sin reemplazo. ¿Cuál es la probabilidad de cada número de piezas defectuosas?
+
+```{r}
+N <- 50
+K <- 10
+n <- 8
+
+x <- 0:8
+prob <- dhyper(x, K, N - K, n)
+
+tabla <- data.frame(x = x, Probabilidad = round(prob, 4))
+tabla
+
+# Media, varianza y desviación estándar
+media <- n * K / N
+varianza <- n * (K / N) * (1 - K / N) * (N - n) / (N - 1)
+desv <- sqrt(varianza)
+
+cat("Media:", media, "\n")
+cat("Varianza:", round(varianza, 4), "\n")
+cat("Desviación estándar:", round(desv, 4), "\n")
+```
+
+```{r}
+barplot(prob, names.arg = x, col = "steelblue",
+        main = "Hipergeométrica(50, 10, 8)",
+        xlab = "Número de piezas defectuosas", ylab = "Probabilidad")
+
+
+```
+
+## Efecto de los parámetros
+
+**Efecto de** K (con $N=50$ y $n=10$ fijos)
+
+```{r}
+par(mfrow = c(2, 2)) 
+for (K in c(5, 15, 25, 40)) { barplot(dhyper(0:10, K, 50 - K, 10), names.arg = 0:10, col = "purple", main = paste("K =", K), xlab = "x", ylab = "Probabilidad") }
+```
+
+Efecto de n (con N=50 y K=20 fijos)
+
+```{r}
+par(mfrow = c(2, 2))
+for (n in c(5, 10, 20, 30)) {
+  barplot(dhyper(0:n, 20, 30, n), names.arg = 0:n, col = "orange",
+          main = paste("n =", n), xlab = "x", ylab = "Probabilidad")
+}
+```
+
+Al aumentar K o n, la distribución se mueve hacia la derecha porque la media nK/N aumenta.
+
+Simulación
+
+Se simulan 10,000 valores de una hipergeo(N=50, K=20, n=10) y se comparan con los valores teóricos.
+
+```{r}
+#| code-fold: true
+#| fig-align: center
+
+set.seed(123)
+N <- 50
+K <- 20
+n <- 10
+
+datos <- rhyper(10000, K, N - K, n)
+
+# Valores teóricos
+media_teo <- n * K / N
+var_teo <- n * (K / N) * (1 - K / N) * (N - n) / (N - 1)
+
+cat("Media teórica:", media_teo, "| Media observada:", round(mean(datos), 4), "\n")
+cat("Varianza teórica:", round(var_teo, 4), "| Varianza observada:", round(var(datos), 4), "\n")
+
+# Comparación de la distribución
+obs <- table(factor(datos, levels = 0:10)) / 10000
+teo <- dhyper(0:10, K, N - K, n)
+
+barplot(rbind(obs, teo), beside = TRUE, names.arg = 0:10,
+        col = c("red", "blue"),
+        main = "Simulada vs Teórica", xlab = "x", ylab = "Probabilidad")
+legend("topright", legend = c("Simulada", "Teórica"), fill = c("red", "blue"))
+```
+
+Los valores simulados son muy parecidos a los teóricos.
+
+Teorema Central del Límite
+
+Se generan k=1000 muestras de tamaño 50 de una hipergeo(50, 20, 10). Como mu = 4 y sigma\^2 aprox 1.9592.
+
+```{r}
+#| label: tcl
+#| code-fold: true
+#| fig-align: center
+
+set.seed(123)
+medias <- replicate(1000, mean(rhyper(50, K, N - K, n)))
+
+hist(medias, freq = FALSE, breaks = 30, col = "lightblue",
+     main = "Distribución de las medias muestrales",
+     xlab = "Media muestral", ylab = "Densidad")
+curve(dnorm(x, media_teo, sqrt(var_teo / 50)), add = TRUE, col = "red", lwd = 2)
+
+cat("Media teórica:", media_teo, "| Media observada:", round(mean(medias), 4), "\n")
+cat("Varianza teórica:", round(var_teo / 50, 4), "| Varianza observada:", round(var(medias), 4), "\n")
+```
+
+El histograma de las medias se ajusta a la curva normal, así que se cumple el Teorema Central del Límite.
+
+## Parte 5
+
+## Ejercicios Propuestos
+
+::: {#exr-tcl_poisson}
+Implementa una verificación completa del Teorema Central del Límite para una distribución Poisson con $\lambda = 7$.
+:::
+
+```{r}
+set.seed(123)
+lambda_tcl <- 7
+tamanos <- c(5, 10, 30, 100)
+k_muestras <- 1000
+
+# Medias muestrales para cada tamaño de muestra
+data_tcl <- data.frame()
+for (n in tamanos) {
+  medias <- replicate(k_muestras, mean(rpois(n, lambda_tcl)))
+  temp <- data.frame(
+    media = medias,
+    n = n,
+    n_label = paste("n =", n),
+    # Media estandarizada: (media - λ) / sqrt(λ/n)
+    z = (medias - lambda_tcl) / sqrt(lambda_tcl / n)
+  )
+  data_tcl <- rbind(data_tcl, temp)
+}
+data_tcl$n_label <- factor(data_tcl$n_label, levels = paste("n =", tamanos))
+
+# Tabla comparativa de media y varianza
+tabla_tcl <- data.frame(
+  n = tamanos,
+  Media_Teorica = lambda_tcl,
+  Media_Observada = sapply(tamanos, function(n) mean(data_tcl$media[data_tcl$n == n])),
+  Var_Teorica = lambda_tcl / tamanos,
+  Var_Observada = sapply(tamanos, function(n) var(data_tcl$media[data_tcl$n == n]))
+)
+
+kable (tabla_tcl, digits = 4,
+      caption = "Media y varianza de la media muestral (λ = 7)",
+      col.names = c("n", "Media teórica", "Media observada", "Var. teórica", "Var. observada"))
+```
+
+```{r}
+#| code-fold: true
+#| fig-align: center
+
+ggplot(data_tcl, aes(x = z)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30,
+                 fill = "lightblue", color = "black", alpha = 0.7) +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = 1),
+                color = "red", linewidth = 1) +
+  facet_wrap(~n_label) +
+  labs(title = "Verificación del TCL: Poisson(7)",
+       subtitle = "Medias muestrales estandarizadas. Línea roja: N(0,1)",
+       x = "Media estandarizada",
+       y = "Densidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+```
+
+# Puedo observar que mediante aumentamos el numero de n la curva se va ajustando a la media
+
+::: {#exr-prop_aditiva}
+Verifica por simulación que si $X_1 \sim \text{Poisson}(3.5)$ y $X_2 \sim \text{Poisson}(2.8)$ son independientes, entonces $X_1 + X_2 \sim \text{Poisson}(6.3)$.
+
+**Pasos específicos:**
+
+a)  Generar 10,000 muestras de cada distribución y calcule su suma
+b)  Comparar las estadísticas de la suma con una Poisson(6.3) directa
+c)  Extienda la verificación a la suma de 4 variables Poisson independientes
+:::
+
+```{r}
+# a) genero las muestra 
+set.seed(123)
+n_sim <- 10000
+lambda1 <- 3.5
+lambda2 <- 2.8
+
+X1 <- rpois(n_sim, lambda1)
+X2 <- rpois(n_sim, lambda2)
+suma <- X1 + X2
+```
+
+```{r}
+# b) comparación 
+directa <- rpois(n_sim, lambda1 + lambda2)
+
+stats <- data.frame( Método = c("X1 + X2", "Poisson(6.3) directa", "Teórico"), Media = c(mean(suma), mean(directa), 6.3),Varianza = c(var(suma), var(directa), 6.3)
+)
+kable(stats, digits = 4,
+      caption = "Estadísticas de la suma vs Poisson(6.3)")
+
+```
+
+```{r}
+# Comparación gráfica
+data_comp <- data.frame( valores = c(suma, directa),
+                         metodo = rep(c("X1 + X2", "Poisson(6.3)"), each = n_sim)
+)
+ggplot(data_comp, aes(x = valores, fill = metodo)) +
+  geom_histogram(binwidth = 1, center = 0, position = "dodge2", alpha = 0.7) +
+  scale_fill_manual(values = c("X1 + X2" = "#3498DB", "Poisson(6.3)" = "#E74C3C")) +
+  labs(title = "Suma de Poisson vs Poisson(6.3) directa",
+       x = "Número de eventos",
+       y = "Frecuencia",
+       fill = "Método") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+# c) suma de la variables poisson
+set.seed(456)
+X3 <- rpois(n_sim, 1.9)
+X4 <- rpois(n_sim, 4.2)
+suma4 <- X1 + X2 + X3 + X4
+lambda_total <- 3.5 + 2.8 + 1.9 + 4.2
+
+directa4 <- rpois(n_sim, lambda_total)
+
+stats4 <- data.frame(
+  Método = c("X1 + X2 + X3 + X4", "Poisson(12.4) directa", "Teórico"),
+  Media = c(mean(suma4), mean(directa4), lambda_total),
+  Varianza = c(var(suma4), var(directa4), lambda_total)
+)
+
+kable(stats4, digits = 4,
+      caption = "Estadísticas de la suma de 4 variables vs Poisson(12.4)")
+
+data_comp4 <- data.frame(
+  valores = c(suma4, directa4),
+  metodo = rep(c("Suma de 4 Poisson", "Poisson(12.4)"), each = n_sim)
+)
+
+ggplot(data_comp4, aes(x = valores, fill = metodo)) +
+  geom_histogram(binwidth = 1, center = 0, position = "dodge2", alpha = 0.7) +
+  scale_fill_manual(values = c("Suma de 4 Poisson" = "#2ECC71", "Poisson(12.4)" = "#F39C12")) +
+  labs(title = "Suma de 4 Poisson vs Poisson(12.4) directa",
+       x = "Número de eventos",
+       y = "Frecuencia",
+       fill = "Método") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+::: {#exr-inventarios}
+Una tienda registra que el número de cierto producto vendido por día sigue una distribución Poisson con $\lambda = 8$.
+
+**Problemas de optimización:**
+
+a)  Si la tienda mantiene un inventario de 12 unidades al inicio del día, ¿cuál es la probabilidad de quedarse sin existencias?
+
+b)  ¿Cuántas unidades debe tener para que la probabilidad de agotarse sea menor al 5%?
+
+c)  Calcule el costo esperado diario si:
+
+    - Cada unidad no vendida cuesta \$2 mantenerla en inventario
+    - Cada venta perdida por falta de stock cuesta \$15
+    - El costo de adquisición es \$10 por unidad
+
+d)  Determine el nivel óptimo de inventario que minimiza el costo total esperado.
+:::
+
+```{r}
+# a) Probabilidad de quedarse sin existencias
+lambda_inv <- 8
+inventario <- 12
+
+# P(X > 12)
+prob_agotarse <- 1 - ppois(inventario, lambda_inv)
+cat("P(X > 12) =", round(prob_agotarse, 4), "\n")
+```
+
+```{r}
+# b) inventario
+niveles <- 0:30
+prob_agota <- 1 - ppois(niveles, lambda_inv)
+
+nivel_5 <- min(niveles[prob_agota < 0.05])
+cat("Inventario mínimo:", nivel_5, "unidades\n")
+cat("P(agotarse) con", nivel_5, "unidades =", round(1 - ppois(nivel_5, lambda_inv), 4), "\n")
+```
+
+```{r}
+# c) costo diario esperado
+x <- 0:60
+p <- dpois(x, lambda_inv)
+
+costo_esperado <- function(s) {
+  sobrantes <- pmax(s - x, 0)
+  perdidas <- pmax(x - s, 0)
+  10 * s + 2 * sum(sobrantes * p) + 15 * sum(perdidas * p)
+}
+
+cat("Costo esperado con 12 unidades: $", round(costo_esperado(12), 2), "\n")
+```
+
+```{r}
+# nivel optimo de inventario
+niveles <- 0:25
+costos <- sapply(niveles, costo_esperado)
+
+optimo <- niveles[which.min(costos)]
+cat("Nivel óptimo de inventario:", optimo, "unidades\n")
+cat("Costo esperado mínimo: $", round(min(costos), 2), "\n")
+
+data_costos <- data.frame(inventario = niveles, costo = costos)
+
+ggplot(data_costos, aes(x = inventario, y = costo)) +
+  geom_line(color = "#3498DB", linewidth = 1) +
+  geom_point(size = 2) +
+  geom_point(data = data_costos[data_costos$inventario == optimo, ],
+             color = "red", size = 4) +
+  labs(title = "Costo esperado diario según el nivel de inventario",
+       subtitle = "Punto rojo: nivel óptimo",
+       x = "Unidades en inventario",
+       y = "Costo esperado ($)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+```
+
+# PARTE 6
+
+## Ejercicios Propuestos
+
+::: {#exr-simulacion_1}
+Simular 500 observaciones de una distribución uniforme discreta en {0, 1, 2, 3, 4} y compara las frecuencias observadas con las teóricas.
+:::
+
+```{r}
+set.seed(123)
+n_sim <- 500
+muestra <- sample(0:4, n_sim, replace = TRUE)
+
+# Frecuencias observadas
+freq_obs <- table(muestra)
+freq_rel <- prop.table(freq_obs)
+
+# Comparar con probabilidades teóricas
+comparacion <- data.frame(
+  Valor = 0:4,
+  Prob_Teorica = rep(1/5, 5),
+  Freq_Observada = as.numeric(freq_rel)
+)
+
+kable(comparacion,
+      caption = "Comparación entre probabilidades teóricas y observadas",
+      col.names = c("Valor", "Prob. Teórica", "Freq. Observada"),
+      digits = 4) |>
+  kable_styling(bootstrap_options = "striped")
+```
+
+```{r}
+ggplot(comparacion) +
+  geom_col(aes(x = Valor, y = Freq_Observada), alpha = 0.7, fill = "firebrick") +
+  scale_x_continuous(breaks = 0:4) +
+  geom_hline(yintercept = 1/5, color = "blue", linetype = "dashed", linewidth = 1) +
+  annotate("text", x = 2, y = 1/5 + 0.01, label = "Probabilidad Teórica = 1/5", color = "black") +
+  labs(title = paste("Simulación con", n_sim, "observaciones"),
+       x = "Valor",
+       y = "Probabilidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+::: {#exr-simulacion_2}
+Generar $k=1000$ muestras de tamaño $n=50$ de una distribución uniforme discreta en $\{1, 2, \dots, 9, 10\}$ y verificar el Teorema Central del Límite para las medias muestrales.
+:::
+
+```{r}
+set.seed(123)
+k_muestra <- 1000
+n_muestra <- 50
+
+# Parámetros teóricos
+mu <- 5.5
+sigma2 <- (10^2 - 1) / 12
+
+# Medias muestrales
+medias_muestrales <- replicate(k_muestra, {
+  muestra <- sample(1:10, n_muestra, replace = TRUE)
+  mean(muestra)
+})
+
+hist_data <- data.frame(Medias = medias_muestrales)
+```
+
+```{r}
+ggplot(hist_data) +
+  geom_histogram(aes(x = Medias, after_stat(density)), bins = 30,
+                 fill = "lightblue", alpha = 0.7, color = "black") +
+  geom_function(fun = dnorm, args = list(mean = mu, sd = sqrt(sigma2 / n_muestra)),
+                color = "darkgreen", linetype = "dashed", linewidth = 1) +
+  labs(title = "Distribución de Medias Muestrales",
+       subtitle = paste("n =", n_muestra, "de una v.a. uniforme discreta en {1,...,10}"),
+       x = "Media Muestral",
+       y = "Densidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+# Estadísticas
+cat("Media teórica:", mu, "\n")
+cat("Media observada:", round(mean(medias_muestrales), 4), "\n")
+cat("Varianza teórica de la media:", round(sigma2 / n_muestra, 4), "\n")
+cat("Varianza observada de la media:", round(var(medias_muestrales), 4), "\n")
+```

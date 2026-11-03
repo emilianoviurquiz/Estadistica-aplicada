@@ -1,0 +1,459 @@
+---
+title: "Tarea_5"
+author: "Emiliano Viurquiz"
+format: revealjs
+editor: visual
+---
+```{r}
+#| label: setup
+#| include: false
+
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(gridExtra)
+```
+
+Ejercicios Propuestos
+
+Simulación y Visualización
+
+Genera muestras de diferentes tamaños desde 100 hasta 10000 de una distribución beta(2,5).
+
+Genera una gráfica de convergencia de la media muestral a la media teórica a medida que aumenta el tamaño de la muestra.
+
+De manera análoga, genera una gráfica de convergencia de la varianza muestral a la varianza teórica a medida que aumenta el tamaño de la muestra.
+
+Para el tamaño de muestra más grande, genera un histograma de la muestra junto con la curva de la PDF teórica superpuesta.
+
+```{r}
+#| code-fold: true
+
+set.seed(123)
+a <- 2
+b <- 5
+
+# Valores teóricos
+media_teorica <- a / (a + b)
+var_teorica <- (a * b) / ((a + b)^2 * (a + b + 1))
+
+# Media y varianza para cada tamaño de muestra
+tamanos <- seq(100, 10000, by = 100)
+
+df_conv <- data.frame(
+  n = tamanos,
+  media = sapply(tamanos, function(n) mean(rbeta(n, a, b))),
+  varianza = sapply(tamanos, function(n) var(rbeta(n, a, b)))
+)
+```
+
+```{r}
+#| code-fold: true
+library(ggplot2)
+
+ggplot(df_conv, aes(x = n, y = media)) +
+  geom_line(color = "#E74C3C", linewidth = 1) +
+  geom_hline(yintercept = media_teorica, color = "#2E86C1", linetype = "dashed", linewidth = 1) +
+  labs(title = "Convergencia de la media muestral",
+       subtitle = paste("Línea azul: media teórica =", round(media_teorica, 4)),
+       x = "Tamaño de la muestra",
+       y = "Media muestral") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+```
+
+```{r}
+#| code-fold: true
+
+ggplot(df_conv, aes(x = n, y = varianza)) +
+  geom_line(color = "#E74C3C", linewidth = 1) +
+  geom_hline(yintercept = var_teorica, color = "#2E86C1", linetype = "dashed", linewidth = 1) +
+  labs(title = "Convergencia de la varianza muestral",
+       subtitle = paste("Línea azul: varianza teórica =", round(var_teorica, 4)),
+       x = "Tamaño de la muestra",
+       y = "Varianza muestral") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+```
+
+```{r}
+#| code-fold: true
+
+muestra_grande <- rbeta(10000, a, b)
+
+ggplot(data.frame(x = muestra_grande)) +
+  geom_histogram(aes(x = x, after_stat(density)), bins = 40,
+                 fill = "lightblue", color = "black", alpha = 0.7) +
+  geom_function(fun = dbeta, args = list(shape1 = a, shape2 = b),
+                color = "red", linewidth = 1) +
+  labs(title = "Muestra de tamaño 10,000 de una beta(2,5)",
+       subtitle = "Línea roja: PDF teórica",
+       x = "x",
+       y = "Densidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+```
+
+Teorema Central del Límite
+
+Para diferentes tamaños de muestra verifica el Teorema Central del Límite (TCL) utilizando la distribución beta(2,5).
+
+```{r}
+#| label: ej2-medias
+#| code-fold: true
+
+set.seed(123)
+a <- 2
+b <- 5
+k_muestras <- 1000
+tamanos <- c(5, 10, 30, 100)
+
+# Parámetros teóricos
+mu <- a / (a + b)
+sigma2 <- (a * b) / ((a + b)^2 * (a + b + 1))
+
+# Medias muestrales para cada tamaño de muestra
+data_tcl <- data.frame()
+for (n in tamanos) {
+  medias <- replicate(k_muestras, mean(rbeta(n, a, b)))
+  temp <- data.frame(
+    media = medias,
+    n_label = paste("n =", n),
+    # Media estandarizada
+    z = (medias - mu) / sqrt(sigma2 / n)
+  )
+  data_tcl <- rbind(data_tcl, temp)
+}
+data_tcl$n_label <- factor(data_tcl$n_label, levels = paste("n =", tamanos))
+
+# Tabla comparativa
+tabla_tcl <- data.frame(
+  n = tamanos,
+  Media_Teorica = mu,
+  Media_Observada = sapply(paste("n =", tamanos), function(l) mean(data_tcl$media[data_tcl$n_label == l])),
+  Var_Teorica = sigma2 / tamanos,
+  Var_Observada = sapply(paste("n =", tamanos), function(l) var(data_tcl$media[data_tcl$n_label == l]))
+)
+library(kableExtra)
+
+kable(tabla_tcl, digits = 5, row.names = FALSE,
+      caption = "Media y varianza de la media muestral (beta(2,5))",
+      col.names = c("n", "Media teórica", "Media observada", "Var. teórica", "Var. observada")) 
+  
+```
+
+```{r}
+#| code-fold: true
+#| fig-align: center
+
+ggplot(data_tcl, aes(x = z)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30,
+                 fill = "lightblue", color = "black", alpha = 0.7) +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = 1),
+                color = "red", linewidth = 1) +
+  facet_wrap(~n_label) +
+  labs(title = "Verificación del TCL: beta(2,5)",
+       subtitle = "Medias muestrales estandarizadas. Línea roja: N(0,1)",
+       x = "Media estandarizada",
+       y = "Densidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+```
+
+Parte 2
+
+Ejercicios propuestos
+
+Por medio de simulación numérica (es decir, generando muestras aleatorias de una distribución F con diferentes parámetros, mostrando el histograma de densidad de las muestras y comparándolo con la PDF teórica correspondiente), verifique las siguientes propiedades:
+
+Si $X\sim t(n)$ entonces $X^2 \sim F(1,n)$.
+
+Si $X \sim F(a,b)$ entonces $\frac{1}{X} \sim F(b,a)$.
+
+Si $X \sim \chi^2(a)$ y $Y \sim \chi^2(b)$ son independientes, entonces $\frac{X/a}{Y/b} \sim F(a,b)$.
+
+```{r}
+# a) Si $X\sim t(n)$ entonces $X^2 \sim F(1,n)$
+#| label: ej-fisher-a
+#| code-fold: true
+#| fig-width: 10
+#| fig-height: 4
+#| fig-align: center
+
+set.seed(123)
+
+graficar_a <- function(n){
+  x <- rt(10000, df = n)^2
+  ggplot(data.frame(x = x), aes(x = x)) +
+    geom_histogram(aes(y = after_stat(density)), binwidth = 0.1, boundary = 0,
+                   fill = "lightblue", color = "black", alpha = 0.7) +
+    geom_function(fun = df, args = list(df1 = 1, df2 = n), color = "red", linewidth = 1) +
+    coord_cartesian(xlim = c(0, 5), ylim = c(0, 2)) +
+    labs(title = paste0("X ~ t(", n, "):  X² vs F(1, ", n, ")"),
+         x = "x", y = "Densidad") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+}
+
+grid.arrange(graficar_a(5), graficar_a(20), ncol = 2)
+```
+
+```{r}
+# b) Si $X \sim F(a,b)$ entonces $\frac{1}{X} \sim F(b,a)$
+#| label: ej-fisher-b
+#| code-fold: true
+#| fig-width: 10
+#| fig-height: 4
+#| fig-align: center
+
+set.seed(123)
+
+graficar_b <- function(a, b){
+  x <- 1 / rf(10000, df1 = a, df2 = b)
+  ggplot(data.frame(x = x), aes(x = x)) +
+    geom_histogram(aes(y = after_stat(density)), binwidth = 0.1, boundary = 0,
+                   fill = "lightblue", color = "black", alpha = 0.7) +
+    geom_function(fun = df, args = list(df1 = b, df2 = a), color = "red", linewidth = 1) +
+    coord_cartesian(xlim = c(0, 5)) +
+    labs(title = paste0("X ~ F(", a, ", ", b, "):  1/X vs F(", b, ", ", a, ")"),
+         x = "x", y = "Densidad") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+}
+
+grid.arrange(graficar_b(5, 10), graficar_b(10, 3), ncol = 2)
+```
+
+```{r}
+# c) Si $X \sim \chi^2(a)$ y $Y \sim \chi^2(b)$ son independientes, entonces $\frac{X/a}{Y/b} \sim F(a,b)$
+#| label: ej-fisher-c
+#| code-fold: true
+#| fig-width: 10
+#| fig-height: 4
+#| fig-align: center
+
+set.seed(123)
+
+graficar_c <- function(a, b){
+  X <- rchisq(10000, df = a)
+  Y <- rchisq(10000, df = b)
+  x <- (X / a) / (Y / b)
+  ggplot(data.frame(x = x), aes(x = x)) +
+    geom_histogram(aes(y = after_stat(density)), binwidth = 0.1, boundary = 0,
+                   fill = "lightblue", color = "black", alpha = 0.7) +
+    geom_function(fun = df, args = list(df1 = a, df2 = b), color = "red", linewidth = 1) +
+    coord_cartesian(xlim = c(0, 5)) +
+    labs(title = paste0("(X/", a, ") / (Y/", b, ") vs F(", a, ", ", b, ")"),
+         x = "x", y = "Densidad") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+}
+
+grid.arrange(graficar_c(5, 10), graficar_c(10, 20), ncol = 2)
+```
+
+PArte 3
+
+Genera 1000 muestras aleatorias de tamaño 50 de una distribución normal estándar. Para cada muestra calcula la media muestral y la desviación estándar muestral. Luego calcula la variable aleatoria $T$ y compara su histograma con la función de densidad teórica de $t(49)$.
+
+```{r}
+#| code-fold: true
+
+set.seed(123)
+k_muestras <- 1000
+n <- 50
+mu <- 0
+
+# Media y desviación estándar de cada muestra
+medias <- numeric(k_muestras)
+desviaciones <- numeric(k_muestras)
+
+for (i in 1:k_muestras) {
+  muestra <- rnorm(n, mean = 0, sd = 1)
+  medias[i] <- mean(muestra)
+  desviaciones[i] <- sd(muestra)
+}
+
+# Variable aleatoria T
+T_valores <- (medias - mu) / (desviaciones / sqrt(n))
+
+# Comparación con los valores teóricos de t(49)
+cat("Media teórica:", 0, "| Media observada:", round(mean(T_valores), 4), "\n")
+cat("Varianza teórica:", round(49 / 47, 4), "| Varianza observada:", round(var(T_valores), 4), "\n")
+```
+
+```{r}
+#| code-fold: true
+#| fig-align: center
+
+ggplot(data.frame(T = T_valores)) +
+  geom_histogram(aes(x = T, after_stat(density)), bins = 30,
+                 fill = "lightblue", color = "black", alpha = 0.7) +
+  geom_function(fun = dt, args = list(df = n - 1),
+                color = "red", linewidth = 1) +
+  labs(title = "Histograma de T y densidad teórica t(49)",
+       subtitle = "1000 muestras de tamaño 50 de una N(0,1). Línea roja: t(49)",
+       x = "T",
+       y = "Densidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+```
+
+Parte 4
+
+Ejercicios propuestos
+
+Genera una simulación con tamaños de muestra de 10, 50, 100, 500 y 1000 observaciones de una distribución exponencial con $\lambda = 0.8$. Para cada tamaño de muestra:
+
+Calcula la media, varianza y mediana muestral.
+
+Compara estos estadísticos con los valores teóricos.
+
+Grafica la distribución de las muestras junto con la densidad teórica.
+
+```{r}
+#| label: ej-exp-estadisticos
+#| code-fold: true
+
+set.seed(123)
+lambda <- 0.8
+tamanos <- c(10, 50, 100, 500, 1000)
+
+# Valores teóricos
+media_teorica <- 1 / lambda
+var_teorica <- 1 / lambda^2
+mediana_teorica <- log(2) / lambda
+
+# Generar una muestra para cada tamaño
+muestras <- lapply(tamanos, function(n) rexp(n, rate = lambda))
+
+# Tabla comparativa
+tabla <- data.frame(
+  n = tamanos,
+  Media_Muestral = sapply(muestras, mean),
+  Media_Teorica = media_teorica,
+  Var_Muestral = sapply(muestras, var),
+  Var_Teorica = var_teorica,
+  Mediana_Muestral = sapply(muestras, median),
+  Mediana_Teorica = mediana_teorica
+)
+
+kable(tabla, digits = 4,
+      caption = "Estadísticos muestrales vs valores teóricos (λ = 0.8)",
+      col.names = c("n", "Media", "Media teórica", "Varianza", "Var. teórica", "Mediana", "Mediana teórica")) %>%
+  kable_styling(bootstrap_options = "striped")
+```
+
+Al aumentar el tamaño de la muestra, la media, la varianza y la mediana muestrales se acercan a los valores teóricos. Con n=10 la diferencia es más grande.
+
+```{r}
+#| code-fold: true
+#| fig-width: 10
+#| fig-height: 7
+#| fig-align: center
+
+# Data frame con todas las muestras
+df_muestras <- data.frame(
+  x = unlist(muestras),
+  n_label = factor(rep(paste("n =", tamanos), times = tamanos),
+                   levels = paste("n =", tamanos))
+)
+
+ggplot(df_muestras, aes(x = x)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 0.25, boundary = 0,
+                 fill = "lightblue", color = "black", alpha = 0.7) +
+  stat_function(fun = dexp, args = list(rate = lambda), color = "red", linewidth = 1) +
+  facet_wrap(~n_label, scales = "free_y") +
+  coord_cartesian(xlim = c(0, 8)) +
+  labs(title = "Muestras de una exponencial con λ = 0.8",
+       subtitle = "Línea roja: densidad teórica",
+       x = "x",
+       y = "Densidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+```
+
+Con muestras chicas el histograma se ve irregular, pero al aumentar n se ajusta cada vez mejor a la densidad teórica.
+
+Parte 5
+
+Por medio de simulaciones numéricas, verifica la propiedad de aditividad de la distribución ji-cuadrada sumando dos variables aleatorias ji-cuadrada independientes. Compara los resultados con la distribución ji-cuadrada teórica.
+
+```{r}
+#| label: ej-suma-ji-datos
+#| code-fold: true
+
+set.seed(123)
+N <- 10000
+pares <- list(c(3, 5), c(4, 10), c(10, 15))
+
+df_sumas <- data.frame()
+df_curvas <- data.frame()
+tabla <- data.frame()
+
+for (p in pares) {
+  n1 <- p[1]
+  n2 <- p[2]
+  gl <- n1 + n2
+  etiqueta <- paste0("χ²(", n1, ") + χ²(", n2, ")  vs  χ²(", gl, ")")
+  
+  # Suma de dos ji-cuadradas independientes
+  X1 <- rchisq(N, df = n1)
+  X2 <- rchisq(N, df = n2)
+  suma <- X1 + X2
+  
+  df_sumas <- rbind(df_sumas, data.frame(x = suma, caso = etiqueta))
+  
+  # Densidad teórica χ²(n1 + n2)
+  x_curva <- seq(0, max(suma), length.out = 300)
+  df_curvas <- rbind(df_curvas, data.frame(x = x_curva,
+                                           y = dchisq(x_curva, df = gl),
+                                           caso = etiqueta))
+  
+  # Media y varianza observadas vs teóricas
+  tabla <- rbind(tabla, data.frame(
+    Caso = paste0("(", n1, ", ", n2, ")"),
+    Media_Obs = mean(suma), Media_Teo = gl,
+    Var_Obs = var(suma), Var_Teo = 2 * gl
+  ))
+}
+
+# Mantener el orden de los casos en las gráficas
+niveles <- unique(df_sumas$caso)
+df_sumas$caso <- factor(df_sumas$caso, levels = niveles)
+df_curvas$caso <- factor(df_curvas$caso, levels = niveles)
+
+kable(tabla, digits = 4,
+      caption = "Media y varianza de la suma vs valores de la ji-cuadrada teórica",
+      col.names = c("(n1, n2)", "Media observada", "Media teórica", "Var. observada", "Var. teórica")) %>%
+  kable_styling(bootstrap_options = "striped")
+```
+
+```{r}
+#| label: ej-suma-ji-grafica
+#| code-fold: true
+#| fig-width: 10
+#| fig-height: 7
+#| fig-align: center
+
+ggplot(df_sumas, aes(x = x)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 50, boundary = 0,
+                 fill = "lightblue", color = "black", alpha = 0.7) +
+  geom_line(data = df_curvas, aes(x = x, y = y), color = "red", linewidth = 1) +
+  facet_wrap(~caso, scales = "free", ncol = 2) +
+  labs(title = "Aditividad de la distribución ji-cuadrada",
+       subtitle = "Línea roja: densidad ji-cuadrada teórica con n1 + n2 grados de libertad",
+       x = "Suma",
+       y = "Densidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+```
+
+En los tres casos el histograma de la suma sigue la curva de la chi\^2(n_1 + n_2) y la media y la varianza observadas son cercanas a n_1 + n_2 y 2(n_1 + n_2), así que se verifica la propiedad de aditividad.
